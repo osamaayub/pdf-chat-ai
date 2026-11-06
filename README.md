@@ -1,4 +1,4 @@
-# DocChat: AI PDF Chatbot (Next.js 16 + OpenAI, RAG)
+# DocChat: AI PDF Chatbot (Next.js 16 + OpenAI or Claude, RAG)
 
 Upload a PDF, ask questions, and get short answers with the page they came from. If the answer is not in the document, it says so instead of making something up.
 
@@ -11,7 +11,8 @@ Upload a PDF, ask questions, and get short answers with the page they came from.
 - Upload a PDF (up to 4 MB, 120 pages) and chat with it
 - Answers stream in word by word, with **source page tags**
 - Says **"I don't know"** when the answer isn't in the document
-- OpenAI embeddings (`text-embedding-3-small`) and `gpt-4.1-mini`
+- Works with **OpenAI** (embeddings + `gpt-4.1-mini`) or **Anthropic Claude** (BM25 search + `claude-haiku-5-5`)
+- Falls back to demo mode if the AI service fails (no credits, outage), instead of breaking
 - **Free demo mode**: runs without an API key (keyword search, quoted answers)
 - Security built in: same-origin API, rate limits, strict headers, cost caps (see [Security](#security))
 - Stateless, so it deploys on Vercel with zero setup
@@ -35,6 +36,16 @@ flowchart LR
 3. **Embed** every chunk once, at upload, with OpenAI (256 dimensions to keep them small).
 4. **Retrieve** the 4 chunks closest to the question by cosine similarity.
 5. **Answer** with `gpt-4.1-mini` at temperature 0, using only those chunks, and stream the answer back.
+
+### OpenAI or Claude?
+
+| | OpenAI (`OPENAI_API_KEY`) | Claude (`ANTHROPIC_API_KEY`) |
+| --- | --- | --- |
+| Search | Embeddings: matches meaning | BM25: classic keyword ranking, rare words count more |
+| Answers | `gpt-4.1-mini` | `claude-haiku-5-5` (change with `CLAUDE_MODEL`) |
+| Why | Best search quality | Anthropic has no embeddings API, so search runs locally for free |
+
+If both keys are set, OpenAI is used. With Claude, try asking with words that appear in the document; BM25 can miss synonyms that embeddings would catch.
 
 ## Architecture
 
@@ -62,10 +73,10 @@ src/
 ├── components/chat.tsx       # upload + chat UI (client)
 └── lib/
     ├── chunk.ts              # page-aware overlapping chunker (pure)
-    ├── text.ts               # keyword vectors, cosine similarity (pure)
+    ├── text.ts               # BM25, keyword vectors, cosine similarity (pure)
     ├── store.ts              # pack/unpack vectors, top-k retrieval (pure)
     ├── answer.ts             # system prompt, context builder, demo answers
-    ├── vectors.ts            # OpenAI client + embeddings (server-only)
+    ├── vectors.ts            # picks the provider, OpenAI + Claude clients, embeddings (server-only)
     ├── guard.ts              # same-origin check + rate limits (server-only)
     └── rate-limit.ts         # sliding-window limiter
 ```
@@ -85,7 +96,7 @@ Files marked `server-only` fail the build if they are ever imported into browser
 | Clickjacking, XSS, sniffing | Strict Content-Security-Policy, `frame-ancestors 'none'`, `nosniff`, HSTS |
 | Leaking errors | Generic error messages to users, details only in server logs |
 
-Know the limits: the rate limiter lives in each server instance's memory, so it is a speed bump, not a hard wall. For a strict shared limit, swap it for Redis (for example Upstash) with the same interface. **Always set a monthly budget in your OpenAI account** (Settings → Limits) before you put a key on a public site.
+Know the limits: the rate limiter lives in each server instance's memory, so it is a speed bump, not a hard wall. For a strict shared limit, swap it for Redis (for example Upstash) with the same interface. **Always set a monthly budget in your AI provider account** before you put a key on a public site.
 
 ## Run it locally
 
@@ -110,13 +121,17 @@ Open http://localhost:3000 and upload `sample/brightline-handbook.pdf` (a fictio
 
 1. Fork or push this repo to your GitHub.
 2. On [vercel.com/new](https://vercel.com/new), import the repo. Vercel detects Next.js; keep the defaults.
-3. Under **Environment Variables**, add `OPENAI_API_KEY` (mark it Sensitive). Skip it to deploy in free demo mode.
+3. Under **Environment Variables**, add `OPENAI_API_KEY` or `ANTHROPIC_API_KEY`. Skip both to deploy in free demo mode.
 4. Click **Deploy**. Every push to `main` deploys again.
-5. Set a monthly budget in your OpenAI account.
+5. Set a monthly budget in your OpenAI or Anthropic account.
 
 | Variable | Required | What it does |
 | --- | --- | --- |
-| `OPENAI_API_KEY` | No | Real embeddings and GPT answers. Without it the app runs in demo mode. |
+| `OPENAI_API_KEY` | No | Embeddings search and GPT answers |
+| `ANTHROPIC_API_KEY` | No | BM25 search and Claude answers (used when there is no OpenAI key) |
+| `CLAUDE_MODEL` | No | Claude model, default `claude-haiku-5-5` |
+
+With no key at all the app runs in free demo mode.
 
 ### Demo mode
 
@@ -131,7 +146,7 @@ Without a key the app uses a keyword vector instead of embeddings and quotes the
 
 ## Stack
 
-Next.js 16 (App Router, Route Handlers), React 19, TypeScript, Tailwind CSS 4, OpenAI SDK, unpdf, Zod, Vitest.
+Next.js 16 (App Router, Route Handlers), React 19, TypeScript, Tailwind CSS 4, OpenAI SDK, Anthropic SDK, unpdf, Zod, Vitest.
 
 ## Author
 
