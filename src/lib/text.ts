@@ -18,3 +18,32 @@ export function keywordVector(text: string, dims = 512): number[] {
 }
 
 export const cosine = (a: number[], b: number[]) => a.reduce((s, x, i) => s + x * (b[i] ?? 0), 0);
+
+/**
+ * BM25 keyword ranking: the classic search-engine formula. Rare words that appear in a chunk
+ * count more than common ones, and long chunks don't win just by being long.
+ * Used with Claude, because Anthropic has no embeddings API.
+ */
+export function bm25<T extends { text: string }>(chunks: T[], query: string, k = 6, k1 = 1.2, b = 0.75) {
+  const docs = chunks.map((c) => words(c.text));
+  const avg = docs.reduce((n, d) => n + d.length, 0) / (docs.length || 1);
+  const df = new Map<string, number>();
+  for (const d of docs) for (const w of new Set(d)) df.set(w, (df.get(w) ?? 0) + 1);
+  const q = [...new Set(words(query))];
+  return chunks
+    .map((c, i) => {
+      const d = docs[i];
+      const tf = new Map<string, number>();
+      for (const w of d) tf.set(w, (tf.get(w) ?? 0) + 1);
+      let score = 0;
+      for (const w of q) {
+        const f = tf.get(w) ?? 0;
+        if (!f) continue;
+        const idf = Math.log(1 + (docs.length - (df.get(w) ?? 0) + 0.5) / ((df.get(w) ?? 0) + 0.5));
+        score += idf * ((f * (k1 + 1)) / (f + k1 * (1 - b + (b * d.length) / avg)));
+      }
+      return { ...c, score };
+    })
+    .sort((a, b2) => b2.score - a.score)
+    .slice(0, k);
+}
