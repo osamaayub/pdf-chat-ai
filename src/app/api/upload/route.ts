@@ -1,57 +1,36 @@
-import { extractText, getDocumentProxy } from "unpdf";
-import { splitIntoChunks } from "@/lib/chunk";
-import { guard } from "@/lib/guard";
-import { packVectors } from "@/lib/store";
-import { embed, hasOpenAI, provider } from "@/lib/vectors";
-
-const errorText = (err: unknown) => (err instanceof Error ? err.message : String(err));
+import { ingest, readPdf } from "@/lib/rag/pipeline";
+import { guard } from "@/lib/security/guard";
+import { jsonError } from "@/lib/http";
 
 // Vercel functions accept request bodies up to 4.5 MB.
 const MAX_BYTES = 4 * 1024 * 1024;
 const MAX_PAGES = 120;
 const MAX_CHUNKS = 400;
 
+/** POST a PDF as form data ("file"). Returns its chunks (and vectors with OpenAI) for the browser to keep. */
 export async function POST(req: Request) {
   const blocked = guard(req, "upload");
   if (blocked) return blocked;
 
   const form = await req.formData().catch(() => null);
   const file = form?.get("file");
-  if (!(file instanceof File) || file.type !== "application/pdf") return Response.json({ error: "Upload a PDF file." }, { status: 400 });
-  if (file.size > MAX_BYTES) return Response.json({ error: "PDF must be 4 MB or smaller." }, { status: 413 });
+  if (!(file instanceof File) || file.type !== "application/pdf") return jsonError("Upload a PDF file.", 400);
+  if (file.size > MAX_BYTES) return jsonError("PDF must be 4 MB or smaller.", 413);
 
   const bytes = new Uint8Array(await file.arrayBuffer());
   // Check the real file signature, not just the name or the type the browser sent.
-  if (new TextDecoder().decode(bytes.subarray(0, 5)) !== "%PDF-") return Response.json({ error: "That file is not a real PDF." }, { status: 400 });
+  if (new TextDecoder().decode(bytes.subarray(0, 5)) !== "%PDF-") return jsonError("That file is not a real PDF.", 400);
 
   try {
-    // 1. Read the text of every page. The file is never saved anywhere.
-    const pdf = await getDocumentProxy(bytes);
-    if (pdf.numPages > MAX_PAGES) return Response.json({ error: `PDF must have ${MAX_PAGES} pages or fewer.` }, { status: 413 });
-    const { text } = await extractText(pdf, { mergePages: false });
-    const pages = text.map((t, i) => ({ page: i + 1, text: t }));
-
-    // 2. Split into overlapping chunks.
-    const chunks = splitIntoChunks(pages);
-    if (chunks.length === 0) return Response.json({ error: "No text found. Is this a scanned PDF?" }, { status: 422 });
-    if (chunks.length > MAX_CHUNKS) return Response.json({ error: "This PDF has too much text. Try a shorter one." }, { status: 413 });
-
-    // 3. With OpenAI, turn each chunk into a vector once, here. Demo mode rebuilds its keyword vectors on each question.
-    // If OpenAI fails (no credits, outage), fall back to demo mode instead of failing the upload.
-    let vectors: string | null = null;
-    let notice: string | undefined;
-    if (hasOpenAI()) {
-      try {
-        vectors = packVectors(await embed(chunks.map((c) => c.text)));
-      } catch (err) {
-        console.error("embedding failed, using demo mode", errorText(err));
-        notice = "The AI service is unavailable right now, so this PDF uses demo mode (keyword search).";
-      }
-    }
+    const pages = await readPdf(bytes); // the file is never saved anywhere
+    if (pages.length > MAX_PAGES) return jsonError(`PDF must have ${MAX_PAGES} pages or fewer.`, 413);
+    const doc = await ingest(pages);
+    if (doc.chunks.length === 0) return jsonError("No text found. Is this a scanned PDF?", 422);
+    if (doc.chunks.length > MAX_CHUNKS) return jsonError("This PDF has too much text. Try a shorter one.", 413);
     const name = file.name.replace(/[^\w.\- ]/g, "_").slice(0, 100);
-    return Response.json({ name, pages: pages.length, chunks: chunks.map(({ page, text }) => ({ page, text })), vectors, mode: vectors ? "openai" : provider() === "anthropic" ? "anthropic" : "demo", notice });
+    return Response.json({ name, ...doc });
   } catch (err) {
-    console.error("upload failed", errorText(err));
-    return Response.json({ error: "Could not read this PDF. Try another file." }, { status: 500 });
+    console.error("upload failed:", err instanceof Error ? err.message : err);
+    return jsonError("Could not read this PDF. Try another file.", 500);
   }
 }
