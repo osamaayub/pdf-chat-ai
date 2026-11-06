@@ -2,7 +2,7 @@
 
 Upload a PDF, ask questions, and get short answers with the page they came from. If the answer is not in the document, it says so instead of making something up.
 
-**Live demo:** LIVE_URL · **Video tutorial:** [Build an AI PDF Chatbot with Next.js and OpenAI](https://www.youtube.com/@osamaayubdev)
+**Live demo:** [pdf-chat-ai-neon.vercel.app](https://pdf-chat-ai-neon.vercel.app) · **Video tutorial:** [Build an AI PDF Chatbot with Next.js and OpenAI](https://www.youtube.com/@osamaayubdev)
 
 ![DocChat answering from a company handbook with a source page tag](docs/screenshot.jpg)
 
