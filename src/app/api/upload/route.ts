@@ -2,7 +2,9 @@ import { extractText, getDocumentProxy } from "unpdf";
 import { splitIntoChunks } from "@/lib/chunk";
 import { guard } from "@/lib/guard";
 import { packVectors } from "@/lib/store";
-import { embed, hasOpenAI } from "@/lib/vectors";
+import { embed, hasOpenAI, provider } from "@/lib/vectors";
+
+const errorText = (err: unknown) => (err instanceof Error ? err.message : String(err));
 
 // Vercel functions accept request bodies up to 4.5 MB.
 const MAX_BYTES = 4 * 1024 * 1024;
@@ -35,11 +37,21 @@ export async function POST(req: Request) {
     if (chunks.length > MAX_CHUNKS) return Response.json({ error: "This PDF has too much text. Try a shorter one." }, { status: 413 });
 
     // 3. With OpenAI, turn each chunk into a vector once, here. Demo mode rebuilds its keyword vectors on each question.
-    const vectors = hasOpenAI() ? packVectors(await embed(chunks.map((c) => c.text))) : null;
+    // If OpenAI fails (no credits, outage), fall back to demo mode instead of failing the upload.
+    let vectors: string | null = null;
+    let notice: string | undefined;
+    if (hasOpenAI()) {
+      try {
+        vectors = packVectors(await embed(chunks.map((c) => c.text)));
+      } catch (err) {
+        console.error("embedding failed, using demo mode", errorText(err));
+        notice = "The AI service is unavailable right now, so this PDF uses demo mode (keyword search).";
+      }
+    }
     const name = file.name.replace(/[^\w.\- ]/g, "_").slice(0, 100);
-    return Response.json({ name, pages: pages.length, chunks: chunks.map(({ page, text }) => ({ page, text })), vectors, mode: hasOpenAI() ? "openai" : "demo" });
+    return Response.json({ name, pages: pages.length, chunks: chunks.map(({ page, text }) => ({ page, text })), vectors, mode: vectors ? "openai" : provider() === "anthropic" ? "anthropic" : "demo", notice });
   } catch (err) {
-    console.error("upload failed", err);
+    console.error("upload failed", errorText(err));
     return Response.json({ error: "Could not read this PDF. Try another file." }, { status: 500 });
   }
 }
