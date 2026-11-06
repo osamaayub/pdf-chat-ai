@@ -2,7 +2,7 @@
 
 import { useRef, useState } from "react";
 
-type Doc = { name: string; pages: number; chunks: { page: number; text: string }[]; vectors: string | null; mode: "openai" | "demo" };
+type Doc = { name: string; pages: number; chunks: { page: number; text: string }[]; vectors: string | null; mode: "openai" | "anthropic" | "demo"; notice?: string };
 type Msg = { role: "user" | "ai"; text: string; pages?: number[] };
 
 const pagesIn = (text: string) => [...new Set([...text.matchAll(/page (\d+)/gi)].map((m) => Number(m[1])))];
@@ -66,8 +66,10 @@ export function Chat() {
             <div className="flex justify-between gap-3"><dt className="text-muted">File</dt><dd className="truncate font-medium">{doc.name}</dd></div>
             <div className="flex justify-between"><dt className="text-muted">Pages</dt><dd>{doc.pages}</dd></div>
             <div className="flex justify-between"><dt className="text-muted">Chunks</dt><dd>{doc.chunks.length}</dd></div>
+            <div className="flex justify-between"><dt className="text-muted">Search</dt><dd>{doc.mode === "openai" ? "AI embeddings" : doc.mode === "anthropic" ? "BM25 + Claude" : "Keywords (demo)"}</dd></div>
           </dl>
         )}
+        {doc?.notice && <p className="mt-4 rounded-xl border border-amber-400/40 px-3 py-2 text-sm text-amber-300" role="status">{doc.notice}</p>}
       </section>
 
       <section className="flex min-h-[520px] flex-col rounded-2xl border border-line bg-panel">
