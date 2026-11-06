@@ -32,7 +32,7 @@ export function Chat() {
     setError("");
     setBusy("answer");
     setMsgs((m) => [...m, { role: "user", text: question }, { role: "ai", text: "" }]);
-    const res = await fetch("/api/chat", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ question, chunks: doc.chunks, vectors: doc.vectors }) });
+    const res = await fetch("/api/chat", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ question, chunks: doc.chunks, vectors: doc.vectors, mode: doc.mode }) });
     if (!res.ok || !res.body) {
       setBusy(null);
       setMsgs((m) => m.slice(0, -2));
