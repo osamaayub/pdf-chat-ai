@@ -1,5 +1,5 @@
 import { Chat } from "@/components/chat";
-import { provider } from "@/lib/vectors";
+import { preferredMode } from "@/lib/ai/config";
 
 export const dynamic = "force-dynamic";
 
@@ -12,8 +12,8 @@ export default function Home() {
           <h1 className="text-xl font-bold">DocChat</h1>
           <p className="text-sm text-muted">Chat with your PDF. Every answer shows the page it came from.</p>
         </div>
-        <span className={`ml-auto rounded-full border px-3 py-1 text-xs font-semibold ${provider() !== "demo" ? "border-ok/40 text-ok" : "border-amber-400/40 text-amber-300"}`}>
-          {{ openai: "OpenAI mode", anthropic: "Claude mode", demo: "Demo mode: no API key, keyword search" }[provider()]}
+        <span className={`ml-auto rounded-full border px-3 py-1 text-xs font-semibold ${preferredMode() !== "demo" ? "border-ok/40 text-ok" : "border-amber-400/40 text-amber-300"}`}>
+          {{ openai: "OpenAI mode", anthropic: "Claude mode", demo: "Demo mode: no API key, keyword search" }[preferredMode()]}
         </span>
       </header>
       <Chat />
