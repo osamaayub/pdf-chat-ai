@@ -1,5 +1,5 @@
 import type { Chunk } from "./chunk";
-import { cosine } from "./vectors";
+import { cosine } from "./text";
 
 export type StoredChunk = Chunk & { vector: number[] };
 
