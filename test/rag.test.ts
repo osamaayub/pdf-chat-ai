@@ -65,3 +65,15 @@ describe("buildContext", () => {
     expect(ctx).toContain("[page 1]");
   });
 });
+
+describe("bm25", () => {
+  it("ranks the chunk with the rare matching words first", async () => {
+    const { bm25 } = await import("../src/lib/text");
+    const chunks = [
+      { page: 1, text: "The studio pays for a co-working space if you prefer not to work from home." },
+      { page: 3, text: "Internet costs are covered up to 50 US dollars per month." },
+      { page: 4, text: "Performance reviews happen twice a year at the studio." },
+    ];
+    expect(bm25(chunks, "Is my internet covered?", 1)[0].page).toBe(3);
+  });
+});
